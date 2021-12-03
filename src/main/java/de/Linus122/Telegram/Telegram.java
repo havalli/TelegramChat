@@ -9,25 +9,27 @@ import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.logging.Level;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import de.Linus122.TelegramComponents.ChatMessageToTelegram;
+import de.Linus122.TelegramComponents.*;
 import de.Linus122.TelegramChat.TelegramChat;
-import de.Linus122.TelegramComponents.Chat;
-import de.Linus122.TelegramComponents.ChatMessageToMc;
-import de.Linus122.TelegramComponents.Update;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.Statistic;
 
 public class Telegram {
 	public JsonObject authJson;
 	public boolean connected = false;
 
-	static int lastUpdate = 0;
+	static int lastUpdate = -2;
 	public String token;
 
 	private List<TelegramActionListener> listeners = new ArrayList<TelegramActionListener>();
@@ -76,7 +78,8 @@ public class Telegram {
 				if (ob.isJsonObject()) {
 					Update update = gson.fromJson(ob, Update.class);
 		
-					if(lastUpdate == update.getUpdate_id()) return true;
+					if(lastUpdate == update.getUpdate_id())
+						return true;
 					lastUpdate = update.getUpdate_id();
 
 					if (update.getMessage() != null) {
@@ -125,27 +128,153 @@ public class Telegram {
 		return true;
 	}
 	
-	public void handleUserMessage(String text, Update update) {
-		Chat chat = update.getMessage().getChat();
-		int user_id = update.getMessage().getFrom().getId();
-		if (TelegramChat.getBackend().getLinkCodes().containsKey(text)) {
+	public void handleUserMessage(String telegramChatText, Update update) {
+		Chat telegramChat = update.getMessage().getChat();
+		User user = update.getMessage().getFrom();
+		int telegram_user_id = user.getId();
+		if (TelegramChat.getBackend().getLinkCodes().containsKey(telegramChatText)) {
 			// LINK
-			TelegramChat.link(TelegramChat.getBackend().getUUIDFromLinkCode(text), user_id);
-			TelegramChat.getBackend().removeLinkCode(text);
-		} else if (TelegramChat.getBackend().getLinkedChats().containsKey(user_id)) {
-			ChatMessageToMc chatMsg = new ChatMessageToMc(
-					TelegramChat.getBackend().getUUIDFromUserID(user_id), text, chat.getId());
-			
-			for (TelegramActionListener actionListener : listeners) {
-				actionListener.onSendToMinecraft(chatMsg);
+			TelegramChat.link(TelegramChat.getBackend().getUUIDFromLinkCode(telegramChatText), telegram_user_id);
+			TelegramChat.getBackend().removeLinkCode(telegramChatText);
+			TelegramChat.save();
+		} else if (TelegramChat.getBackend().getLinkedChats().containsKey(telegram_user_id)) {
+
+			if(telegramChatText.startsWith("/werda")){
+				sendWerdaSatistics(telegramChat);
 			}
-			
-			if(!chatMsg.isCancelled()){
-				TelegramChat.sendToMC(chatMsg);
+			else if(telegramChatText.startsWith("/berghoch")){
+				sendBerchHochSatistics(telegramChat);
+			}
+			else if(telegramChatText.startsWith("/suchti")){
+				sendSuchtiSatistics(telegramChat);
+			}
+			else if(telegramChatText.startsWith("/hebamme")){
+				sendHebameSatistics(telegramChat);
+			}
+			else {
+				ChatMessageToMc chatMsg = new ChatMessageToMc(
+						TelegramChat.getBackend().getUUIDFromUserID(telegram_user_id), telegramChatText, telegramChat.getId());
+
+				for (TelegramActionListener actionListener : listeners) {
+					actionListener.onSendToMinecraft(chatMsg);
+				}
+
+				if(!chatMsg.isCancelled()){
+					TelegramChat.sendToMC(chatMsg);
+				}
 			}
 		} else {
-			this.sendMsg(chat.getId(), Utils.formatMSG("need-to-link")[0]);
+			Bukkit.getLogger().log(Level.INFO, "Player '" + user.getUsername() + "' with id '" + user.getId() + "' not linked");
+			this.sendMsg(telegramChat.getId(), Utils.formatMSG("need-to-link")[0]);
 		}
+	}
+
+	public void sendHebameSatistics(Chat telegramChat){
+
+		OfflinePlayer[] players = Bukkit.getOfflinePlayers();
+		Map<Integer, String> map = new HashMap<>();
+
+
+		for (OfflinePlayer player: players) {
+			int statistic = player.getStatistic(Statistic.ANIMALS_BRED);
+			map.put(statistic, player.getName());
+
+		}
+
+		Map<Integer, String> treeMap = new TreeMap<>(Collections.reverseOrder());
+		treeMap.putAll(map);
+		Set<Map.Entry<Integer, String>> entries = treeMap.entrySet();
+
+		StringBuilder report = new StringBuilder();
+		entries.forEach( entry -> {
+			report
+					.append(entry.getValue())
+					.append(", ")
+					.append(entry.getKey())
+					.append(" Tiere Zur Welt gebracht")
+					.append("\r\n");
+		});
+		this.sendMsg(telegramChat.getId(), report.toString());
+	}
+
+	public void sendWerdaSatistics(Chat telegramChat){
+
+		StringBuilder report = new StringBuilder();
+		OfflinePlayer[] players = Bukkit.getOfflinePlayers();
+		boolean atLeastOnePlayerOnline = false;
+		for (OfflinePlayer player: players) {
+			if(player.isOnline()) {
+				atLeastOnePlayerOnline = true;
+				//Date lastLogin = new Date(player.getLastPlayed());
+				//Instant onlineSince = Instant.now().minusMillis(player.getLastPlayed());
+				//DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+				report
+						.append(player.getName())
+						//.append(" online seid: ")
+						//.append(formatter.format(onlineSince))
+						.append("\r\n");
+			}
+		}
+		if(atLeastOnePlayerOnline){
+			this.sendMsg(telegramChat.getId(), report.toString());
+		}
+		else {
+			this.sendMsg(telegramChat.getId(), "Keiner da");
+		}
+	}
+
+	public void sendBerchHochSatistics(Chat telegramChat){
+
+		OfflinePlayer[] players = Bukkit.getOfflinePlayers();
+		Map<Integer, String> map = new HashMap<>();
+
+		for (OfflinePlayer player: players) {
+			int statistic = player.getStatistic(Statistic.DEATHS);
+			map.put(statistic, player.getName());
+
+		}
+
+		Map<Integer, String> treeMap = new TreeMap<>(Collections.reverseOrder());
+		treeMap.putAll(map);
+		Set<Map.Entry<Integer, String>> entries = treeMap.entrySet();
+
+		StringBuilder report = new StringBuilder();
+		entries.forEach( entry -> {
+			report
+					.append(entry.getValue())
+					.append(", ")
+					.append(entry.getKey())
+					.append(" mal gestorben")
+					.append("\r\n");
+		});
+		this.sendMsg(telegramChat.getId(), report.toString());
+	}
+
+	public void sendSuchtiSatistics(Chat telegramChat){
+
+		OfflinePlayer[] players = Bukkit.getOfflinePlayers();
+		Map<Integer, String> map = new HashMap<>();
+
+		for (OfflinePlayer player: players) {
+			int statistic = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
+			map.put(statistic / 20 / 60 / 60, player.getName());
+
+		}
+
+		Map<Integer, String> treeMap = new TreeMap<>(Collections.reverseOrder());
+		treeMap.putAll(map);
+		Set<Map.Entry<Integer, String>> entries = treeMap.entrySet();
+
+		StringBuilder report = new StringBuilder();
+		entries.forEach( entry -> {
+			report
+					.append(entry.getValue())
+					.append(", ")
+					.append(entry.getKey())
+					.append("h gezockt")
+					.append("\r\n");
+		});
+		this.sendMsg(telegramChat.getId(), report.toString());
 	}
 
 	public void sendMsg(int id, String msg) {
@@ -161,7 +290,7 @@ public class Telegram {
 		}
 		Gson gson = new Gson();
 		if(!chat.isCancelled()){
-			post("sendMessage", gson.toJson(chat, ChatMessageToTelegram.class));	
+			post("sendMessage", chat);
 		}
 	}
 
@@ -177,9 +306,9 @@ public class Telegram {
 		}).start();
 	}
 
-	public void post(String method, String json) {
+	public void post(String method, ChatMessageToTelegram chat) {
 		try {
-			String body = json;
+			String json = gson.toJson(chat, ChatMessageToTelegram.class);
 			URL url = new URL(String.format(API_URL_GENERAL, TelegramChat.getBackend().getToken(), method));
 			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 			connection.setRequestMethod("POST");
@@ -187,20 +316,28 @@ public class Telegram {
 			connection.setDoOutput(true);
 			connection.setUseCaches(false);
 			connection.setRequestProperty("Content-Type", "application/json; ; Charset=UTF-8");
-			connection.setRequestProperty("Content-Length", String.valueOf(body.length()));
+			connection.setRequestProperty("Content-Length", String.valueOf(json.length()));
 
 			DataOutputStream wr = new DataOutputStream(connection.getOutputStream());
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(wr, "UTF-8"));
-			writer.write(body);
+			writer.write(json);
 			writer.close();
 			wr.close();
 
-			BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+			if(connection.getResponseCode() == 403){
+				Bukkit.getLogger().log(Level.WARNING,"Failed to send Telegram message to this chat: " + chat.chat_id);
+				Object chatId = chat.chat_id;
+				Integer chatIdIndex = TelegramChat.getBackend().chat_ids.indexOf(chatId);
+				TelegramChat.getBackend().chat_ids.remove(chatIdIndex);
+				TelegramChat.save();
+				return;
+			}
 
-			writer.close();
+			BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
 			reader.close();
 		} catch (Exception e) {
 			reconnect();
+			Bukkit.getLogger().log(Level.WARNING,"Failed to send Telegram message", e);
 			System.out.print("[Telegram] Disconnected from Telegram, reconnect...");
 		}
 

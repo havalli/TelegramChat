@@ -1,113 +1,138 @@
 package de.Linus122.Handlers;
 
-import java.security.Permissions;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Formatter;
-import java.util.logging.Handler;
-import java.util.logging.LogManager;
-import java.util.logging.LogRecord;
-import java.util.logging.SimpleFormatter;
-
+import de.Linus122.MessageInterceptingCommandRunner;
+import de.Linus122.Telegram.Telegram;
+import de.Linus122.Telegram.TelegramActionListener;
+import de.Linus122.TelegramComponents.ChatMessageToMc;
+import de.Linus122.TelegramComponents.ChatMessageToTelegram;
+import net.milkbowl.vault.permission.Permission;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.PluginLogger;
 import org.bukkit.plugin.RegisteredServiceProvider;
+import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 
-import de.Linus122.Telegram.Telegram;
-import de.Linus122.Telegram.TelegramActionListener;
-import de.Linus122.TelegramChat.TelegramChat;
-import de.Linus122.TelegramComponents.ChatMessageToMc;
-import de.Linus122.TelegramComponents.ChatMessageToTelegram;
-import net.milkbowl.vault.permission.Permission;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 public class CommandHandler extends ConsoleHandler implements TelegramActionListener {
 
-	private Permission permissionsAdapter;
-	private int lastChatId = -1;
-	private long lastCommandTyped;
-	
-	private Telegram telegram;
-	private Plugin plugin;
-	
-	public CommandHandler(Telegram telegram, Plugin plugin) {
-		java.util.logging.Logger global = java.util.logging.Logger.getLogger("");
-		//global.addHandler(this);
+    private Permission permissionsAdapter;
+    //private int lastChatId = -1;
+    //private long lastCommandTyped;
 
-		LogManager.getLogManager().getLoggerNames().asIterator().forEachRemaining(c -> LogManager.getLogManager().getLogger(c).addHandler(this));
-			
-		
-		 
-		//Bukkit.getLogger().addHandler(this);
+    private Telegram telegram;
+    private Plugin plugin;
 
-		//Arrays.stream(Bukkit.getPluginManager().getPlugins()).forEach(k -> k.getLogger().addHandler(this));
+    private class TelegramCallback implements MessageInterceptingCommandRunner.ITelegramCallback {
 
-		setupVault();
-		
-		this.telegram = telegram;
-		this.plugin = plugin;
-	}
-	
-	private void setupVault() {
+        private int chatId;
+
+        public TelegramCallback(int chatId) {
+
+            this.chatId = chatId;
+        }
+
+        @Override
+        public void Send(String message) {
+            while (message.length() > 3000) {
+                String subMessage = message.substring(0, 3000);
+                Bukkit.getLogger().log(Level.INFO, "sending response with Textlength: " + subMessage.length());
+                telegram.sendMsg(chatId, subMessage);
+                message = message.substring(3000);
+            }
+            Bukkit.getLogger().log(Level.INFO, "sending response with Textlength: " + message.length());
+            telegram.sendMsg(chatId, message);
+        }
+    }
+
+    public CommandHandler(Telegram telegram, Plugin plugin) {
+        Bukkit.getLogger().addHandler(this);
+
+        setupVault();
+
+        this.telegram = telegram;
+        this.plugin = plugin;
+    }
+
+    private void setupVault() {
         RegisteredServiceProvider<Permission> rsp = Bukkit.getServer().getServicesManager().getRegistration(Permission.class);
         permissionsAdapter = rsp.getProvider();
-	}
+    }
 
-	@Override
-	public void onSendToTelegram(ChatMessageToTelegram chat) {
-		// TODO Auto-generated method stub
-		
-	}
+    @Override
+    public void onSendToTelegram(ChatMessageToTelegram chat) {
+        // TODO Auto-generated method stub
 
-	@Override
-	public void onSendToMinecraft(ChatMessageToMc chatMsg) {
-	
-		if(permissionsAdapter == null) {
-			// setting up vault permissions
-			this.setupVault();
-		}
-		
-		if(chatMsg.getContent().startsWith("/")) {
-			
-			OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(chatMsg.getUuid_sender());
-			
-			if(permissionsAdapter.playerHas(null, offlinePlayer, "telegramchat.console")) {
-				lastChatId = chatMsg.getChatID_sender();
-				lastCommandTyped = System.currentTimeMillis();
-				
-				Bukkit.getScheduler().runTask(this.plugin, () -> {
-					Bukkit.dispatchCommand(Bukkit.getConsoleSender(), chatMsg.getContent().substring(1, chatMsg.getContent().length()-1));
-				});
-			}
+    }
 
-		}
-		
-		
-	}
+    @Override
+    public void onSendToMinecraft(ChatMessageToMc chatMsg) {
 
-	@Override
-	public void close() throws SecurityException {
-		// TODO Auto-generated method stub
-		
-	}
+        if (permissionsAdapter == null) {
+            // setting up vault permissions
+            this.setupVault();
+        }
 
-	@Override
-	public void flush() {
-		// TODO Auto-generated method stub
-	}
+        if (chatMsg.getContent().startsWith("/")) {
+            chatMsg.setCancelled(true);
+            String command = chatMsg.getContent().substring(1);
+            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(chatMsg.getUuid_sender());
 
-	@Override
-	public void publish(LogRecord record) {
-		if(lastChatId != -1) {
-//			String s = String.format(record.getMessage(), record.getParameters());
-			String s = this.getFormatter().format(record);
-			telegram.sendMsg(lastChatId, s);	
-			
-		}
-		
-	}
 
+            int lastChatId = chatMsg.getChatID_sender();
+            BukkitScheduler scheduler = Bukkit.getScheduler();
+            if (command.compareToIgnoreCase("restart") == 0) {
+                scheduler.runTaskLater(
+                        this.plugin,
+                        () -> {
+                            final MessageInterceptingCommandRunner cmdRunner = new MessageInterceptingCommandRunner(
+                                    Bukkit.getConsoleSender(),
+                                    new TelegramCallback(lastChatId),
+                                    offlinePlayer);
+                            Bukkit.getLogger().log(Level.INFO, "restarting Server delayed: " + command);
+                            Bukkit.dispatchCommand(cmdRunner, command);
+                        },
+                        60);
+            } else {
+                scheduler.runTask(
+                        this.plugin,
+                        () -> {
+                            final MessageInterceptingCommandRunner cmdRunner = new MessageInterceptingCommandRunner(
+                                    Bukkit.getConsoleSender(),
+                                    new TelegramCallback(lastChatId),
+                                    offlinePlayer);
+                            Bukkit.getLogger().log(Level.INFO, "performing command: " + command);
+                            Bukkit.dispatchCommand(cmdRunner, command);
+                        });
+            }
+        }
+    }
+
+    @Override
+    public void close() throws SecurityException {
+        // TODO Auto-generated method stub
+
+    }
+
+    @Override
+    public void flush() {
+        // TODO Auto-generated method stub
+    }
+
+    @Override
+    public void publish(LogRecord record) {
+        if (record.getLevel() == Level.SEVERE) {
+            String s = this.getFormatter().format(record);
+            ChatMessageToTelegram chat = new ChatMessageToTelegram();
+            chat.text = s;
+            telegram.sendAll(chat);
+        }
+    }
 }

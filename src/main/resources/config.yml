@@ -4,6 +4,7 @@ messages:
   join-message: "`%s joined the game.`"
   quit-message: "`%s left the game.`"
   death-message: "`%s`"
+  night-skip: "Guten Morgen!"
   need-to-link: "Sorry, please link your account with */linktelegram ingame* to use the chat!"
   can-see-but-not-chat: "You can see the chat but you can't chat at the moment. Type */linktelegram ingame* to chat!"
   success-linked: "Success! Linked %s"

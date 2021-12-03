@@ -14,7 +14,7 @@ public class Data {
 	// Token : Player ID
 	private HashMap<String, UUID> linkCodes = new HashMap<String, UUID>();
 	
-	public List<Integer> chat_ids = new ArrayList<Integer>();
+	public ArrayList<Integer> chat_ids = new ArrayList<Integer>();
 	
 	private boolean firstUse = true;
 	
@@ -46,10 +46,6 @@ public class Data {
 
 	public List<Integer> getIds() {
 		return chat_ids;
-	}
-
-	public void setIds(List<Integer> ids) {
-		this.chat_ids = ids;
 	}
 
 	public boolean isFirstUse() {

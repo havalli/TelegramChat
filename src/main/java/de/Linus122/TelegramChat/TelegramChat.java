@@ -6,21 +6,27 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.TimeSkipEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.google.gson.Gson;
@@ -39,6 +45,8 @@ public class TelegramChat extends JavaPlugin implements Listener {
 	private static FileConfiguration cfg;
 
 	private static Data data = new Data();
+	private static Date lastTimeUserQuit = null;
+	private static Player playerJustPlacedWitherSkull = null;
 	public static Telegram telegramHook;
 
 	@Override
@@ -91,7 +99,7 @@ public class TelegramChat extends JavaPlugin implements Listener {
 		telegramHook.addListener(new BanHandler());
 		
 		// Console sender handler, allows players to send console commands (telegram.console permission)
-		// telegramHook.addListener(new CommandHandler(telegramHook, this));
+		telegramHook.addListener(new CommandHandler(telegramHook, this));
 
 		Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> {
 			boolean connectionLost = false;
@@ -105,7 +113,7 @@ public class TelegramChat extends JavaPlugin implements Listener {
 			}
 		}, 10L, 10L);
 
-		new Metrics(this);
+		//new Metrics(this);
 	}
 
 	@Override
@@ -212,6 +220,7 @@ public class TelegramChat extends JavaPlugin implements Listener {
 
 	@EventHandler
 	public void onQuit(PlayerQuitEvent e) {
+		lastTimeUserQuit = new Date();
 		if (!this.getConfig().getBoolean("enable-joinquitmessages"))
 			return;
 		if (telegramHook.connected) {
@@ -219,6 +228,34 @@ public class TelegramChat extends JavaPlugin implements Listener {
 			chat.parse_mode = "Markdown";
 			chat.text = Utils.formatMSG("quit-message", e.getPlayer().getName())[0];
 			telegramHook.sendAll(chat);
+		}
+	}
+
+	@EventHandler
+	public void onBlockPlace(BlockPlaceEvent event){
+		Block block = event.getBlockPlaced();
+		if(block.getType() == Material.WITHER_SKELETON_SKULL){
+			playerJustPlacedWitherSkull = event.getPlayer();
+			Bukkit.getLogger().log(Level.INFO, "Wither skull placed by " + playerJustPlacedWitherSkull.getName());
+		}
+	}
+
+	@EventHandler
+	public void onSpawn(CreatureSpawnEvent event) {
+		if(event.getEntityType().equals(EntityType.WITHER)){
+			Bukkit.getLogger().log(Level.INFO, "Wither spawn.");
+			if (playerJustPlacedWitherSkull != null) {
+				Bukkit.getLogger().log(Level.INFO, "Wither spawned by " + playerJustPlacedWitherSkull.getName());
+				if (telegramHook.connected) {
+					ChatMessageToTelegram chat = new ChatMessageToTelegram();
+					//chat.parse_mode = "Markdown";
+					int x = event.getLocation().getBlockX();
+					int y = event.getLocation().getBlockY();
+					int z = event.getLocation().getBlockZ();
+					chat.text = playerJustPlacedWitherSkull.getName() + " hat Bock auf beef mit nem Wither. Sei kein Lauch, hilf deinem Bro. Stepp rüber nach X="+x+",Y="+y+",Z="+z+" und wams dem Teil ein par rüber.";
+					telegramHook.sendAll(chat);
+				}
+			}
 		}
 	}
 
@@ -234,6 +271,31 @@ public class TelegramChat extends JavaPlugin implements Listener {
 			chat.text = Utils
 					.escape(Utils.formatMSG("general-message-to-telegram", e.getPlayer().getName(), e.getMessage())[0])
 					.replaceAll("§.", "");
+			telegramHook.sendAll(chat);
+		}
+	}
+
+	@EventHandler
+	public void onTimeSkip(TimeSkipEvent e) {
+		if (!this.getConfig().getBoolean("enable-chatmessages"))
+			return;
+		if (e.isCancelled())
+			return;
+		if(e.getSkipReason() != TimeSkipEvent.SkipReason.NIGHT_SKIP){
+			return;
+		}
+		if(lastTimeUserQuit == null){
+			return;
+		}
+		long diff = new Date().getTime() - lastTimeUserQuit.getTime();
+		long seconds = TimeUnit.MILLISECONDS.toSeconds(diff);
+		if(seconds > 120){
+			return;
+		}
+		if (telegramHook.connected) {
+			ChatMessageToTelegram chat = new ChatMessageToTelegram();
+			//chat.parse_mode = "Markdown";
+			chat.text = "Nacht ist vorbei!";
 			telegramHook.sendAll(chat);
 		}
 	}

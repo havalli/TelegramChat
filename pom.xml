@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>xyz.spaceio</groupId>
 	<artifactId>telegramchat</artifactId>
-	<version>1.0.17-SNAPSHOT</version>
+	<version>1.14.18</version>
 	<name>TelegramChat</name>
 	<url>https://www.spigotmc.org/resources/telegramchat.16576/</url>
 
@@ -13,13 +13,10 @@
 	</properties>
 
 	<repositories>
-		<repository>
-			<id>spaceio-repo</id>
-			<url>https://repo.spaceio.xyz/repository/maven-public/</url>
-		</repository>
+		<!-- This adds the Spigot Maven repository to the build -->
 		<repository>
 			<id>spigot-repo</id>
-			<url>https://hub.spigotmc.org/nexus/content/groups/public/</url>
+			<url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
 		</repository>
 		<repository>
 			<id>jitpack.io</id>
@@ -29,9 +26,9 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>org.bukkit</groupId>
-			<artifactId>craftbukkit</artifactId>
-			<version>1.12.2-R0.1-SNAPSHOT</version>
+			<groupId>org.spigotmc</groupId>
+			<artifactId>spigot-api</artifactId>
+			<version>1.18-R0.1-SNAPSHOT</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -41,18 +38,6 @@
 			<scope>provided</scope>
 		</dependency>
 	</dependencies>
-	<distributionManagement>
-		<snapshotRepository>
-			<id>spaceio-snapshots</id>
-			<name>snapshots</name>
-			<url>https://repo.spaceio.xyz/repository/maven-snapshots/</url>
-		</snapshotRepository>
-		<repository>
-			<id>spaceio-releases</id>
-			<name>releases</name>
-			<url>https://repo.spaceio.xyz/repository/maven-releases/</url>
-		</repository>
-	</distributionManagement>
 	<build>
 		<!-- Uses the properties in this file for plugin.yml and config.yml -->
 		<resources>
